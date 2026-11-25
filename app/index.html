@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SAP BTP + CPI | AI Self-Healing B2B Order Hub</title>
+  <style>
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { margin: 0; background: #f3f5f8; color: #1d2d3e; }
+    header { background: #1d2d3e; color: #fff; padding: 16px 28px; display: flex; justify-content: space-between; align-items: center; }
+    header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+    header span { font-size: 12px; background: #0a6ed1; padding: 4px 10px; border-radius: 12px; }
+    .container { max-width: 1280px; margin: 24px auto; padding: 0 20px; }
+    .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
+    .kpi { background: #fff; padding: 18px; border-radius: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); border-left: 4px solid #0a6ed1; }
+    .kpi.green { border-color: #107e3e; }
+    .kpi.red { border-color: #bb0000; }
+    .kpi.purple { border-color: #6c32a9; }
+    .kpi-label { font-size: 12px; color: #556b82; text-transform: uppercase; font-weight: 600; }
+    .kpi-val { font-size: 28px; font-weight: 700; margin-top: 6px; }
+    .toolbar { background: #fff; padding: 16px 20px; border-radius: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+    .btn { border: none; padding: 9px 14px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .btn-primary { background: #0a6ed1; color: #fff; }
+    .btn-warn { background: #e9730c; color: #fff; }
+    .btn-danger { background: #bb0000; color: #fff; }
+    .btn-heal { background: #107e3e; color: #fff; }
+    .btn-outline { background: #eef3f8; color: #1d2d3e; }
+    .card { background: #fff; border-radius: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); overflow: hidden; }
+    .card-header { padding: 14px 20px; border-bottom: 1px solid #e5e9f0; display: flex; justify-content: space-between; align-items: center; font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #eef1f5; vertical-align: top; }
+    th { background: #f8fafc; color: #556b82; font-weight: 600; }
+    .badge { padding: 4px 9px; border-radius: 12px; font-size: 11px; font-weight: 700; display: inline-block; }
+    .PROCESSED { background: #e6f4ea; color: #107e3e; }
+    .HEALED_AND_PROCESSED { background: #f3e8ff; color: #6c32a9; }
+    .FAILED { background: #fdecea; color: #bb0000; }
+    .ai-box { font-size: 12px; line-height: 1.45; }
+    .ai-fix { color: #0a6ed1; margin-top: 4px; font-weight: 500; }
+    .master-strip { margin-top: 18px; background: #fff; padding: 14px 20px; border-radius: 10px; font-size: 12px; color: #556b82; box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>SAP BTP + Cloud Integration (CPI) — AI Self-Healing B2B Hub</h1>
+    <span>Cloud Foundry Live Production</span>
+  </header>
+  <div class="container">
+    <div class="kpis">
+      <div class="kpi"><div class="kpi-label">Total B2B Orders</div><div class="kpi-val" id="k-total">0</div></div>
+      <div class="kpi green"><div class="kpi-label">Clean Processed</div><div class="kpi-val" id="k-proc">0</div></div>
+      <div class="kpi red"><div class="kpi-label">Failed Exceptions</div><div class="kpi-val" id="k-fail">0</div></div>
+      <div class="kpi purple"><div class="kpi-label">AI Self-Healed</div><div class="kpi-val" id="k-heal">0</div></div>
+    </div>
+    <div class="toolbar">
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-primary" onclick="sendSample('valid')">+ Simulate Valid Order (JSON)</button>
+        <button class="btn btn-warn" onclick="sendSample('healable')">+ Simulate Missing Tax ID (XML - Healable)</button>
+        <button class="btn btn-danger" onclick="sendSample('unhealable')">+ Simulate Unknown Partner (Failed)</button>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn btn-heal" onclick="healAll()">⚡ Auto-Heal All Eligible</button>
+        <button class="btn btn-outline" onclick="loadOrders()">↻ Refresh</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <span>Real-Time CPI Ingestion & AI Exception Triage Stream</span>
+        <span style="font-size:12px; color:#556b82;">Auto-syncing every 5s</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Order ID</th>
+            <th>Customer</th>
+            <th>Format</th>
+            <th>Amount</th>
+            <th>Tax ID</th>
+            <th>Status</th>
+            <th>AI Root-Cause & Recommended Fix</th>
+            <th>Self-Heal Action</th>
+          </tr>
+        </thead>
+        <tbody id="orders-body"></tbody>
+      </table>
+    </div>
+    <div class="master-strip">
+      <strong>SAP BTP Customer Master Reference:</strong>
+      Apex Retail (<code>GSTIN1234</code>, GOLD, Limit $100k) &nbsp;|&nbsp;
+      Metro Mart (<code>GSTIN9988</code>, GOLD, Limit $150k) &nbsp;|&nbsp;
+      QuickBuy (<code>GSTIN5566</code>, SILVER, Limit $75k)
+    </div>
+  </div>
+  <script>
+    const API = '/odata/v4/hub';
+    async function loadOrders() {
+      const res = await fetch(`${API}/Orders?$orderby=createdAt desc`);
+      const data = await res.json();
+      const rows = data.value || [];
+      document.getElementById('k-total').innerText = rows.length;
+      document.getElementById('k-proc').innerText = rows.filter(r => r.status === 'PROCESSED').length;
+      document.getElementById('k-fail').innerText = rows.filter(r => r.status === 'FAILED').length;
+      document.getElementById('k-heal').innerText = rows.filter(r => r.status === 'HEALED_AND_PROCESSED').length;
+      document.getElementById('orders-body').innerHTML = rows.map(o => `
+        <tr>
+          <td><strong>${o.orderId}</strong></td>
+          <td>${o.customerName}</td>
+          <td>${o.sourceFormat}</td>
+          <td>$${Number(o.amount).toLocaleString()}</td>
+          <td><code>${o.taxId || 'MISSING'}</code></td>
+          <td><span class="badge ${o.status}">${o.status}</span></td>
+          <td class="ai-box"><div>${o.aiRootCause || ''}</div><div class="ai-fix">${o.aiSuggestedFix || ''}</div></td>
+          <td>${o.canAutoHeal ? `<button class="btn btn-heal" onclick="healOne('${o.ID}')">⚡ Auto-Heal & Retry</button>` : `<span style="color:#899ba8; font-size:12px;">—</span>`}</td>
+        </tr>`).join('');
+    }
+    async function sendSample(type) {
+      const rand = Math.floor(1000 + Math.random() * 9000);
+      const payloads = {
+        valid: { orderId: `ORD-${rand}`, customerName: 'Apex Retail', sourceFormat: 'JSON', amount: 24500, taxId: 'GSTIN1234' },
+        healable: { orderId: `ORD-${rand}`, customerName: 'Metro Mart', sourceFormat: 'XML', amount: 48000, taxId: 'MISSING' },
+        unhealable: { orderId: `ORD-${rand}`, customerName: 'Nova Traders', sourceFormat: 'JSON', amount: 15000, taxId: 'MISSING' }
+      };
+      await fetch(`${API}/Orders`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payloads[type]) });
+      loadOrders();
+    }
+    async function healOne(id) {
+      await fetch(`${API}/autoHealOrder`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ID: id }) });
+      loadOrders();
+    }
+    async function healAll() {
+      await fetch(`${API}/autoHealAll`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+      loadOrders();
+    }
+    loadOrders();
+    setInterval(loadOrders, 5000);
+  </script>
+</body>
+</html>

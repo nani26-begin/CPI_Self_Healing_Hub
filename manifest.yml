@@ -1,0 +1,12 @@
+---
+applications:
+  - name: sap-btp-cpi-self-healing-hub
+    routes:
+      - route: sap-btp-cpi-self-healing-hub-ajit.cfapps.ap21.hana.ondemand.com
+    path: .
+    memory: 512M
+    disk_quota: 1G
+    buildpacks:
+      - nodejs_buildpack
+    stack: cflinuxfs4
+    command: npx cds-serve
